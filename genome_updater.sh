@@ -1156,7 +1156,7 @@ while getopts "${getopts_list}" opt; do
     esac
 done
 
-# If workingdir exists and there's a history file, grab and inject params
+# If workingdir exists and there's a history file, grab and inject params and the last updated label
 if [[ -n "${working_dir}" && -s "${working_dir}/history.tsv" ]]; then
 
     if [[ -n "${rollback_label}" ]]; then
@@ -1173,6 +1173,9 @@ if [[ -n "${working_dir}" && -s "${working_dir}/history.tsv" ]]; then
         # automatically detecting and replacing the escaped non-printable characters (e.g.: complete\ genome)
         declare -a "args=($(cut -f 5 "${working_dir}/history.tsv" | tail -n 1))"
     fi
+
+    # Set label of the current version
+    current_label="$(tail -1 "${working_dir}/history.tsv" | cut -f2 -d$'\t')"
 
     # For each entry of the current argument list $@
     # add to the end of the array to have priority
@@ -1534,9 +1537,7 @@ if [[ "${MODE}" == "UPDATE" ]]; then
         if [[ -f "${rollback_assembly_summary}" ]]; then
             rm "${default_assembly_summary}"
             copy_or_link "${rollback_assembly_summary}" "${default_assembly_summary}"
-	    if [[ "${copy_mode}" != "soft" ]]; then
-                echo "${new_assembly_summary}" > "${default_assembly_summary}.path"
-            fi
+	    current_label="${rollback_label}"
         else
             echo "Rollback label/assembly_summary.txt not found [${rollback_assembly_summary}]"
             exit 1
@@ -1547,16 +1548,14 @@ fi
 if [[ "${MODE}" == "UPDATE" ]] || [[ "${MODE}" == "FIX" ]]; then # get existing version information
     # Check if default assembly_summary is a symbolic link to some version
     if [[ -L "${default_assembly_summary}" ]]; then
-    	current_assembly_summary="$(readlink -m ${default_assembly_summary})"
-    	current_output_prefix="$(dirname ${current_assembly_summary})/"
-    	current_label="$(basename ${current_output_prefix})"
-    elif [[ -f "${default_assembly_summary}" && -f "${default_assembly_summary}.path" ]]; then
-        current_assembly_summary="$(cat ${default_assembly_summary}.path)"
-        current_output_prefix="$(dirname ${current_assembly_summary})/"
-	current_label="$(basename "${current_output_prefix}")"
+        current_assembly_summary="$(readlink -m "${default_assembly_summary}")"
+        current_output_prefix="$(dirname "${current_assembly_summary}")/"
+    elif [[ -f "${default_assembly_summary}" ]]; then
+        current_assembly_summary="${working_dir}/${current_label}/assembly_summary.txt"
+        current_output_prefix="$(dirname "${current_assembly_summary}")/"
     else
-        echo "assembly_summary.txt is not a link to any version [${default_assembly_summary}]"
-	exit 1
+        echo "assembly_summary.txt for the current version was not found [${default_assembly_summary}]"
+        exit 1
     fi
 fi
 
@@ -1650,9 +1649,6 @@ if [[ "${MODE}" == "NEW" ]]; then
     else
         # Set version - link new assembly as the default
         copy_or_link "${new_assembly_summary}" "${default_assembly_summary}"
-	if [[ "${copy_mode}" != "soft" ]]; then
-		echo "${new_assembly_summary}" > "${default_assembly_summary}.path"
-	fi
 
         # Add entry on history
         write_history "${new_label}" "${new_label}" "${timestamp}" "${new_assembly_summary}"
@@ -1790,7 +1786,6 @@ else # UPDATE/FIX
             echolog "Setting-up new version [${new_label}]" "1"
             rm "${default_assembly_summary}"
             copy_or_link "${new_assembly_summary}" "${default_assembly_summary}"
-	    if [[ "${copy_mode}" != "soft" ]]; then                                                                                                                                                                                  echo "${new_assembly_summary}" > "${default_assembly_summary}.path"                                                                                                                                     fi
             # Add entry on history
             write_history "${current_label}" "${new_label}" "${timestamp}" "${new_assembly_summary}"
             echolog " - Done" "1"
