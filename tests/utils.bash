@@ -28,8 +28,12 @@ sanity_check() { # $1 outdir, $2 label, [$3 number of file types]
     assert_file_exist ${1}${2}/assembly_summary.txt
     # Created history file 
     assert_file_exist ${1}history.tsv
-    # Created copy or link to current version of assembly_summary
+    # Created copy + helperfile or link to current version of assembly_summary
     assert_file_exist ${1}assembly_summary.txt
+    if [[ ! -L ${1}assembly_summary.txt ]]; then
+	    assert_file_exists ${1}assembly_summary.txt.path
+	    assert_file_not_empty ${1}assembly_summary.txt.path
+    fi
     # Created log file
     assert_file_exist ${1}${2}/*.log
     # Created files folder

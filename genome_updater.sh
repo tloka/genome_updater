@@ -1534,6 +1534,9 @@ if [[ "${MODE}" == "UPDATE" ]]; then
         if [[ -f "${rollback_assembly_summary}" ]]; then
             rm "${default_assembly_summary}"
             copy_or_link "${rollback_assembly_summary}" "${default_assembly_summary}"
+	    if [[ "${copy_mode}" != "soft" ]]; then
+                echo "${new_assembly_summary}" > "${default_assembly_summary}.path"
+            fi
         else
             echo "Rollback label/assembly_summary.txt not found [${rollback_assembly_summary}]"
             exit 1
@@ -1543,13 +1546,18 @@ fi
 
 if [[ "${MODE}" == "UPDATE" ]] || [[ "${MODE}" == "FIX" ]]; then # get existing version information
     # Check if default assembly_summary is a symbolic link to some version
-    if [[ ! -L "${default_assembly_summary}" ]]; then
+    if [[ -L "${default_assembly_summary}" ]]; then
+    	current_assembly_summary="$(readlink -m ${default_assembly_summary})"
+    	current_output_prefix="$(dirname ${current_assembly_summary})/"
+    	current_label="$(basename ${current_output_prefix})"
+    elif [[ -f "${default_assembly_summary}" && -f "${default_assembly_summary}.path" ]]; then
+        current_assembly_summary="$(cat ${default_assembly_summary}.path)"
+        current_output_prefix="$(dirname ${current_assembly_summary})/"
+	current_label="$(basename "${current_output_prefix}")"
+    else
         echo "assembly_summary.txt is not a link to any version [${default_assembly_summary}]"
-        exit 1
+	exit 1
     fi
-    current_assembly_summary="$(readlink -m "${default_assembly_summary}")"
-    current_output_prefix="$(dirname "${current_assembly_summary}")/"
-    current_label="$(basename "${current_output_prefix}")"
 fi
 
 if [[ "${MODE}" == "NEW" ]] || [[ "${MODE}" == "UPDATE" ]]; then # with new info, new variables are necessary
@@ -1642,6 +1650,10 @@ if [[ "${MODE}" == "NEW" ]]; then
     else
         # Set version - link new assembly as the default
         copy_or_link "${new_assembly_summary}" "${default_assembly_summary}"
+	if [[ "${copy_mode}" != "soft" ]]; then
+		echo "${new_assembly_summary}" > "${default_assembly_summary}.path"
+	fi
+
         # Add entry on history
         write_history "${new_label}" "${new_label}" "${timestamp}" "${new_assembly_summary}"
 
@@ -1778,6 +1790,7 @@ else # UPDATE/FIX
             echolog "Setting-up new version [${new_label}]" "1"
             rm "${default_assembly_summary}"
             copy_or_link "${new_assembly_summary}" "${default_assembly_summary}"
+	    if [[ "${copy_mode}" != "soft" ]]; then                                                                                                                                                                                  echo "${new_assembly_summary}" > "${default_assembly_summary}.path"                                                                                                                                     fi
             # Add entry on history
             write_history "${current_label}" "${new_label}" "${timestamp}" "${new_assembly_summary}"
             echolog " - Done" "1"
