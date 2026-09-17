@@ -145,12 +145,28 @@ link_version()
         mkdir -p "${2}${path_out}"
         if [[ "${link_mode}" == "hard" ]]; then
             ln "${1}${path_out}${3}" "${2}${path_out}"
+	elif [[ "${link_mode}" == "copy" ]]; then
+	    cp "${1}${path_out}${3}" "${2}${path_out}"
         else
             ln -s -r "${1}${path_out}${3}" "${2}${path_out}"
         fi
     fi
 }
 export -f link_version #export it to be accessible to the parallel call
+
+copy_or_link()
+{ # parameter: ${1} original file, ${2} target file (copy or link)
+    if [[ -f "${1}" && -d "${2%/*}" ]]; then
+        if [[ "${link_mode}" == "hard" ]]; then
+            ln -fT "${1}" "${2}"
+        elif [[ "${link_mode}" == "copy" ]]; then
+            cp "${1}" "${2}"
+        else
+            ln -srfT "${1}" "${2}"
+        fi
+    fi
+}
+export -f copy_or_link # export it to be accessible to the parallel call
 
 list_local_files()
 { # parameter: ${1} prefix, ${2} 1 to list list all, "" list only '-not -empty'
@@ -352,7 +368,7 @@ filter_assembly_summary()
                 return 1
             fi
         else
-            ln -sf "${new_taxdump_file}" "${tmp_new_taxdump}"
+            copy_or_link "${new_taxdump_file}" "${tmp_new_taxdump}"
         fi
     fi
 
@@ -1054,8 +1070,8 @@ function showhelp
     echo $'\tUse a previous version label instead of the latest as base version. Can be also used to rollback to an older version or to create multiple branches from a base version. Mutually exclusive with -i.'
     echo $'\tDefault: ""'
     echo $' -H Link mode'
-    echo $'\tChange link type for files kept between versions. Hard links save inodes (useful on HPC systems) and allow version deletion.'
-    echo $'\tOptions: "hard, soft"'
+    echo $'\tChange link type for files kept between versions. Hard links save inodes (useful on HPC systems) and allow version deletion. Copies produce redundant disk space consumption but enable download on filesystems that do not support any type of links.'
+    echo $'\tOptions: "hard, soft, copy"'
     echo $'\tDefault: "hard"'
     echo $' -R Retry batches'
     echo $'\tNumber of attempts to retry failed downloads in batches.'
@@ -1282,8 +1298,8 @@ if [[ ! "${file_formats}" =~ assembly_report.txt && "${updated_sequence_accessio
     exit 1
 fi
 
-if [[ "${link_mode}" != "hard" && "${link_mode}" != "soft" ]]; then
-    echo "${link_mode}: invalid link mode [hard, soft]"
+if [[ "${link_mode}" != "hard" && "${link_mode}" != "copy" && "${link_mode}" != "soft" ]]; then
+    echo "${link_mode}: invalid link mode [hard, soft, copy]"
     exit 1
 fi
 
@@ -1517,7 +1533,7 @@ if [[ "${MODE}" == "UPDATE" ]]; then
         rollback_assembly_summary="${working_dir}/${rollback_label}/assembly_summary.txt"
         if [[ -f "${rollback_assembly_summary}" ]]; then
             rm "${default_assembly_summary}"
-            ln -s -r "${rollback_assembly_summary}" "${default_assembly_summary}"
+            copy_or_link "${rollback_assembly_summary}" "${default_assembly_summary}"
         else
             echo "Rollback label/assembly_summary.txt not found [${rollback_assembly_summary}]"
             exit 1
@@ -1625,7 +1641,7 @@ if [[ "${MODE}" == "NEW" ]]; then
         if [ ! "$(ls -A "${working_dir}")" ]; then rm -r "${working_dir}"; fi                                     #Remove folder that was just created (if there's nothing in it)
     else
         # Set version - link new assembly as the default
-        ln -s -r "${new_assembly_summary}" "${default_assembly_summary}"
+        copy_or_link "${new_assembly_summary}" "${default_assembly_summary}"
         # Add entry on history
         write_history "${new_label}" "${new_label}" "${timestamp}" "${new_assembly_summary}"
 
@@ -1761,7 +1777,7 @@ else # UPDATE/FIX
             # set version - update default assembly summary
             echolog "Setting-up new version [${new_label}]" "1"
             rm "${default_assembly_summary}"
-            ln -s -r "${new_assembly_summary}" "${default_assembly_summary}"
+            copy_or_link "${new_assembly_summary}" "${default_assembly_summary}"
             # Add entry on history
             write_history "${current_label}" "${new_label}" "${timestamp}" "${new_assembly_summary}"
             echolog " - Done" "1"
