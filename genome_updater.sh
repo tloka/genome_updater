@@ -1176,10 +1176,6 @@ if [[ -n "${working_dir}" && -s "${working_dir}/history.tsv" ]]; then
 
     # Set label of the current version
     current_label="$(cut -f2 -d$'\t' "${working_dir}/history.tsv" | sed '/\S/!d' | tail -1)"
-    #if [[ ! -f "${working_dir}/${current_label}/assembly_summary.txt" ]]; then
-    #        echo "Assembly summary for the current label not found [${current_label}]"
-    #        exit 1
-    #fi
 
     # For each entry of the current argument list $@
     # add to the end of the array to have priority
@@ -1189,16 +1185,13 @@ if [[ -n "${working_dir}" && -s "${working_dir}/history.tsv" ]]; then
         c=$((c + 1))
     done
 else
-    ## if history file does not exist, but default assembly summary is a softlink, get the current_label from here
-    #if [[ -n "${working_dir}" && -L "${working_dir}/assembly_summary.txt" ]]; then
-    #    default_assembly_summary="${working_dir}/assembly_summary.txt"
-    #    current_assembly_summary="$(readlink -m "${default_assembly_summary}")"
-    #    current_output_prefix="$(dirname "${current_assembly_summary}")/"
-    #    current_label="$(readlink -m "${current_output_prefix}")"
-    #elif [[ -n "${working_dir}" && -f "${working_dir}/assembly_summary.txt" ]]; then
-    #    echo "Could not determine the current label."
-    #    exit 1
-    #fi
+    # if history file does not exist, but default assembly summary is a softlink, get the current_label from here
+    if [[ -n "${working_dir}" && -L "${working_dir}/assembly_summary.txt" ]]; then
+        default_assembly_summary="${working_dir}/assembly_summary.txt"
+        current_assembly_summary="$(readlink -m "${default_assembly_summary}")"
+        current_output_prefix="$(dirname "${current_assembly_summary}")/"
+        current_label="$(readlink -m "${current_output_prefix}")"
+    fi
     # parse command line arguments by default
     declare -a "args=($(printf "%q " "$@"))"
 fi
