@@ -1190,7 +1190,7 @@ else
         default_assembly_summary="${working_dir}/assembly_summary.txt"
         current_assembly_summary="$(readlink -m "${default_assembly_summary}")"
         current_output_prefix="$(dirname "${current_assembly_summary}")/"
-        current_label="$(readlink -m "${current_output_prefix}")"
+        current_label="$(basename "${current_output_prefix}")"
     fi
     # parse command line arguments by default
     declare -a "args=($(printf "%q " "$@"))"
