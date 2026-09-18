@@ -69,7 +69,7 @@ gtdb_ar["226"]="${gtdb_base_url}release226/226.0/ar53_taxonomy_r226.tsv.gz"
 gtdb_ar["232"]="${gtdb_base_url}release232/232.0/ar53_taxonomy_r232.tsv.gz"
 
 # Export locale numeric to avoid errors on printf in different setups
-export LC_NUMERIC="en_US.UTF-8"
+export LC_NUMERIC="C.UTF-8"
 
 #activate aliases in the script
 shopt -s expand_aliases
@@ -145,8 +145,8 @@ link_version()
         mkdir -p "${2}${path_out}"
         if [[ "${link_mode}" == "hard" ]]; then
             ln "${1}${path_out}${3}" "${2}${path_out}"
-	elif [[ "${link_mode}" == "copy" ]]; then
-	    cp "${1}${path_out}${3}" "${2}${path_out}"
+        elif [[ "${link_mode}" == "copy" ]]; then
+            cp "${1}${path_out}${3}" "${2}${path_out}"
         else
             ln -s -r "${1}${path_out}${3}" "${2}${path_out}"
         fi
@@ -1070,7 +1070,7 @@ function showhelp
     echo $'\tUse a previous version label instead of the latest as base version. Can be also used to rollback to an older version or to create multiple branches from a base version. Mutually exclusive with -i.'
     echo $'\tDefault: ""'
     echo $' -H Link mode'
-    echo $'\tChange link type for files kept between versions. Hard links save inodes (useful on HPC systems) and allow version deletion. Copies produce redundant disk space consumption but enable download on filesystems that do not support any type of links.'
+    echo $'\tChange link type for files kept between versions. Hard links save inodes (useful on HPC systems) and allow version deletion. \'copy\' produces redundant disk space consumption but enables the use on filesystems that do not support any type of links.'
     echo $'\tOptions: "hard, soft, copy"'
     echo $'\tDefault: "hard"'
     echo $' -R Retry batches'
@@ -1175,7 +1175,11 @@ if [[ -n "${working_dir}" && -s "${working_dir}/history.tsv" ]]; then
     fi
 
     # Set label of the current version
-    current_label="$(tail -1 "${working_dir}/history.tsv" | cut -f2 -d$'\t')"
+    current_label="$(cut -f2 -d$'\t' "${working_dir}/history.tsv" | sed '/\S/!d' | tail -1)"
+    #if [[ ! -f "${working_dir}/${current_label}/assembly_summary.txt" ]]; then
+    #        echo "Assembly summary for the current label not found [${current_label}]"
+    #        exit 1
+    #fi
 
     # For each entry of the current argument list $@
     # add to the end of the array to have priority
@@ -1185,6 +1189,16 @@ if [[ -n "${working_dir}" && -s "${working_dir}/history.tsv" ]]; then
         c=$((c + 1))
     done
 else
+    ## if history file does not exist, but default assembly summary is a softlink, get the current_label from here
+    #if [[ -n "${working_dir}" && -L "${working_dir}/assembly_summary.txt" ]]; then
+    #    default_assembly_summary="${working_dir}/assembly_summary.txt"
+    #    current_assembly_summary="$(readlink -m "${default_assembly_summary}")"
+    #    current_output_prefix="$(dirname "${current_assembly_summary}")/"
+    #    current_label="$(readlink -m "${current_output_prefix}")"
+    #elif [[ -n "${working_dir}" && -f "${working_dir}/assembly_summary.txt" ]]; then
+    #    echo "Could not determine the current label."
+    #    exit 1
+    #fi
     # parse command line arguments by default
     declare -a "args=($(printf "%q " "$@"))"
 fi
@@ -1516,47 +1530,31 @@ fi
 
 # If file already exists and it's a new repo
 if [[ "${MODE}" == "NEW" ]]; then
-    if [[ -f "${default_assembly_summary}" || -L "${default_assembly_summary}" ]]; then
+    if [[ -f "${default_assembly_summary}" ]]; then
         echo "Cannot start a new repository with an existing assembly_summary.txt in the working directory [${default_assembly_summary}]"
         exit 1
     fi
-fi
-
-# If file already exists and it's a new repo
-if [[ "${MODE}" == "FIX" ]]; then
-    if [[ ! -f "${default_assembly_summary}" ]]; then
-        echo "Cannot find assembly_summary.txt version to fix [${default_assembly_summary}]"
-        exit 1
-    fi
-fi
-
-if [[ "${MODE}" == "UPDATE" ]]; then
-    # Rollback to a different base version
+else
     if [[ -n "${rollback_label}" ]]; then
-        rollback_assembly_summary="${working_dir}/${rollback_label}/assembly_summary.txt"
-        if [[ -f "${rollback_assembly_summary}" ]]; then
-            rm "${default_assembly_summary}"
-            copy_or_link "${rollback_assembly_summary}" "${default_assembly_summary}"
-	    current_label="${rollback_label}"
-        else
-            echo "Rollback label/assembly_summary.txt not found [${rollback_assembly_summary}]"
-            exit 1
-        fi
+        current_label="${rollback_label}"
     fi
 fi
 
 if [[ "${MODE}" == "UPDATE" ]] || [[ "${MODE}" == "FIX" ]]; then # get existing version information
-    # Check if default assembly_summary is a symbolic link to some version
-    if [[ -L "${default_assembly_summary}" ]]; then
-        current_assembly_summary="$(readlink -m "${default_assembly_summary}")"
-        current_output_prefix="$(dirname "${current_assembly_summary}")/"
-    elif [[ -f "${default_assembly_summary}" ]]; then
-        current_assembly_summary="${working_dir}/${current_label}/assembly_summary.txt"
-        current_output_prefix="$(dirname "${current_assembly_summary}")/"
-    else
-        echo "assembly_summary.txt for the current version was not found [${default_assembly_summary}]"
+    # Stop update or fix, if the current label is unknown
+    if [[ -z "${current_label}" ]]; then
+        echo "Could not identify the current label to ${MODE,,}."
         exit 1
     fi
+
+    # Check for the assembly summary based on the current label
+    current_output_prefix="${working_dir}/${current_label}/"
+    current_assembly_summary="${current_output_prefix}/assembly_summary.txt"
+    if [[ ! -f "${current_assembly_summary}" ]]; then
+        echo "Cannot find assembly_summary.txt version to ${MODE,,} [${current_assembly_summary}]"
+        exit 1
+    fi
+    copy_or_link "${current_assembly_summary}" "${default_assembly_summary}"
 fi
 
 if [[ "${MODE}" == "NEW" ]] || [[ "${MODE}" == "UPDATE" ]]; then # with new info, new variables are necessary
